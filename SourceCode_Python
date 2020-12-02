@@ -1,0 +1,394 @@
+# -*- coding: utf-8 -*-
+
+
+#======================================================FireWatch v1========================================================================================
+#Written by Seyed Nouraie & Kojo Harding Mienza
+
+
+#NO API Keys, you need to get your own, read the ReadME!!!
+
+#====================================================================================================================================================
+
+import requests
+import json
+from base64 import b64encode
+from getpass import getpass
+try:
+    requests.packages.urllib3.disable_warnings()
+except:
+    pass
+import datetime
+import re
+import sys
+import keyring
+from urllib.request import Request, urlopen
+import re
+
+
+class fsisaac():
+    def __init__(self, base_url, taxii_creds):
+        self.base_url=base_url 
+        self.taxii_creds=taxii_creds
+        self.userAndPass = b64encode(self.taxii_creds.encode('utf-8')).decode("ascii")  
+    def getId(self):    
+        url=self.base_url+"collections/"   
+        headers={
+            "Host": "taxii.fsisac.com",
+            'Authorization' : 'Basic %s' %  self.userAndPass,
+            "Content-Type": "application/taxii+json;version=2.1",
+            "Accept": "application/taxii+json;version=2.1"}    
+        session = requests.Session()
+        session.trust_env = False
+        response = session.request("GET", url, headers=headers, verify=False)
+        response_text = json.loads(response.text)       
+        collections = response_text['collections']
+        for collection in collections:
+            if collection['title'] == "automated-high-ragw":
+                collection_name=("FS-ISAAC {}".format(collection['title']))
+                self.collection_id=(collection['id'])
+        return collection_name    
+    def getRange(self):
+        first=datetime.date.today() - datetime.timedelta(days=7)
+        dF = first.strftime("%Y-%m-%d")
+        first=dF+"T00:00:00.000000Z"
+        params={"added_after": first}    
+        url=self.base_url+"/collections/"+self.collection_id+"/objects/"   
+        headers={
+            "Host": "taxii.fsisac.com",
+            'Authorization' : 'Basic %s' %  self.userAndPass,
+            "Content-Type": "application/taxii+json;version=2.1",
+            "Accept": "application/taxii+json;version=2.1"}
+        session = requests.Session()
+        response = session.request("GET", url, params=params,headers=headers, verify=False)
+        response_json = json.loads(response.text)
+        malicious_array=[]  
+        objects=response_json['objects']    
+        for ioc in objects:      
+            if "indicator" in ioc['id']:    
+                pattern=ioc['pattern']
+                pattern_type=pattern.split(':')[0].replace('[','')
+                pattern_info=pattern.split(':')[1]
+                pattern_info = re.sub(" |\'|]","",pattern_info.split('=')[1])            
+                if "ip" in pattern_type:
+                    malicious_array.append(pattern_info)
+        return malicious_array
+               
+class convertFeedtoArray():
+    def __init__(self, ip_array, ipfeed, url, taxiicreds):
+        self.feed = feed
+        self.url = url
+        self.ip_array = ip_array
+        self.taxiicreds=taxiicreds
+    def getFeed(self):
+        self.session = requests.Session()
+        self.response = self.session.request("GET", self.url , verify=False)
+        self.response_text = self.response.text
+    def appendrange(self):
+        if(self.feed == "Talos"):
+            for ip in self.response_text.splitlines():
+                self.ip_array.append(ip)
+            return self.ip_array
+        elif(self.feed == "AlienVault"):
+            for line in self.response_text.splitlines():
+                ip = line.split('#', 1)[0]
+                self.ip_array.append(ip)
+            return self.ip_array
+        elif(self.feed == "FSISAAC"):
+            feed=fsisaac(self.url, self.taxiicreds)
+            feed.getId()
+            return feed.getRange()
+        else:
+            print("Threat intel list not recogonized.")
+    
+
+
+
+t_user = keyring.get_password("Feed1u","Feed")
+t_pass = keyring.get_password("Feed1p","Feed")
+#t_user is the api username for fsisaac
+#t_pass it pass for fsisaac
+#naviagte to cred manager, add an entry with the url feed1u with the username 
+#feed that has api username and another one with url feed1p with username feed 
+#with the api password
+taxiicreds=t_user+":"+t_pass
+#here we define the feed names and the associated host group id and url
+feeds={#"Talos": {"url": "https://talosintelligence.com/documents/ip-blacklist/"},
+       #"AlienVault": {"url": "http://reputation.alienvault.com/reputation.data"},
+       "FSISAAC":{"url":"https://taxii.fsisac.com/ctixapi/ctix21/"}}
+
+ip_array=[]
+
+for feed in feeds:
+    ip_array1 = []
+    convert = convertFeedtoArray(ip_array1, feed, feeds[feed]['url'], taxiicreds)
+    convert.getFeed()
+    ip_array1=convert.appendrange()
+    ip_array += ip_array1
+print(ip_array)
+
+
+
+#Variable Declarations
+
+currChar=0;
+ipHolder=""
+ipArray=ip_array
+APIVoid_ISP=[]
+APIVoid_rDNS=[]
+APIVoidCountry=[]
+APIVoidBulk=""
+APIVoid=[]
+APIVoidBulk=""
+APIVoidBlacklistCount=[]
+BlacklistCount=0
+ViewDNSBulk=""
+ViewDNS=[]
+Req=""
+x=0
+WhoISmatches=0
+ISPmatches=0
+ExitSearch=0
+IPBlocklist=[]
+IPBlocklist_WithCheck=[]
+ListValid=False
+Verdict=0
+dns_api_key = keyring.get_password("dns_api","api")
+void_api_key = keyring.get_password("void_api","api")
+#above pulls the api keys for analysis from the credential manager. Navigate 
+#to cred manager, add an entry with the url dns_api with the username api and 
+#password as the key same with url void_api username api and password key
+
+charcheck= len(List)-1
+
+#input validation
+
+while ListValid==False and charcheck>=0 :
+        
+        currChar=ord(List[charcheck])
+        if currChar!=44 and currChar!=46 and (currChar<48 or currChar>57):   
+            ListValid=False
+            List = input("Invalid items were detected in your list. Only numbers, commas, and decimals are accepted inputs. Please re-enter the IP addresses: ")
+            charcheck= len(List)-1
+        else:
+            charcheck-=1
+            continue
+if charcheck==-1:
+        ListValid=True
+
+# Add each IP into an array (ipArray)
+counter=0
+
+if ListValid:
+    for i in List:
+        counter+=1
+        currChar=ord(i)
+        if currChar!=44:
+            ipHolder=ipHolder+i
+        if currChar==44 or counter==len(List):
+            ipArray.append(ipHolder)
+            ipHolder=""
+# Input validation to check that IP in ipHolder is a valid IP address. 
+            
+
+            
+#Second input validation, ensuring each list item is a valid IP address 
+charcheck=0
+
+for i in ipArray:
+    matchObj=re.match ('[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}',ipArray[charcheck])
+#    
+    if matchObj:
+        print("IP Number:" + i + " is Valid." )
+        charcheck+=1
+        continue
+    else: 
+        ipArray.remove(i)
+        print("IP Number:" + i + " was not a Valid IP, and will be removed from the queries." )
+        charcheck+=1
+#        while ListValid==False and charcheck>=0 :
+#        
+#            currChar=ord(List[charcheck])
+#            if currChar!=44 and currChar!=46 and (currChar<48 or currChar>57):   
+#                ListValid=False
+#                List = input("Invalid items were detected in your list. Only numbers, commas, and decimals are accepted inputs. Please re-enter: ")
+#                charcheck= len(List)-1
+#            else:
+#                charcheck-=1
+#                continue
+            
+ # Loop for cycling through IP array, and calling APIs   
+counter2=0
+
+for i in ipArray:
+
+# Query Viewdns API and save to String APIVoidBulk###
+
+    dns_req_uri='https://api.viewdns.info/reverseip/?host='+ ipArray[counter2] +'&apikey=' + dns_api_key + '&output=json&page=0'
+    Req= Request(dns_req_uri, headers={'User-Agent': 'Mozilla/5.0'})
+    ViewDNS.append(urlopen(Req).read().decode('utf-8'))
+    ViewDNSBulk=(ViewDNS[counter2])
+    
+   
+    void_dns_uri='https://endpoint.apivoid.com/iprep/v1/pay-as-you-go/?key=' + void_api_key + '&ip='+ ipArray[counter2]
+    Req= Request(void_dns_uri, headers={'User-Agent': 'Mozilla/5.0'})
+    APIVoid.append(urlopen(Req).read().decode('utf-8'))
+    APIVoidBulk=(APIVoid[counter2])
+                
+  ##  print (APIVoidBulk)
+
+
+##Gather Reverse DNS Info
+    while x<=len(APIVoidBulk)-1 and ExitSearch==0:
+        matchObj=re.search ('"reverse_dns"\:".*?"',APIVoidBulk)
+        if matchObj:
+            APIVoid_rDNS.append(matchObj.group(0))
+            print ("\n"+ipArray[counter2]+":\n"+APIVoid_rDNS[WhoISmatches])
+            WhoISmatches+=1           
+            ExitSearch+=1
+        else:
+             print ("No WhoIS Description Found")
+             ExitSearch+=1
+        x+=1
+        
+            
+    ExitSearch=0
+    x=0
+
+##Gather ISP record
+    
+    while x<=len(APIVoidBulk)-1 and ExitSearch==0:
+        matchObj=re.search ('"act":\[\{"o":.*?",',APIVoidBulk)
+        if matchObj:
+            APIVoid_ISP.append(matchObj.group(0))
+            print (APIVoid_ISP[ISPmatches])
+            ISPmatches+=1
+            ExitSearch+=1
+        else:
+            print ("No ISP Record Found")
+            ExitSearch+=1
+        x+=1
+
+    ExitSearch=0
+    x=0
+##Gather Country IP is located in 
+
+    while x<=len(APIVoidBulk)-1 and ExitSearch==0:
+        matchObj=re.search ('"country_code"\:"[A-Z]*"',APIVoidBulk)
+        if matchObj:        
+            APIVoidCountry.append(matchObj.group(0))
+            print (APIVoidCountry[counter2])
+            ExitSearch+=1
+        else:
+             print ("No Country of Origin Found")
+             APIVoidCountry.append ("No Country of Origin Found")
+             ExitSearch+=1
+        x+=1
+            
+    ExitSearch=0
+    x=0
+
+    
+#Gather Number of Times Blacklisted from APIVoid
+
+    while x<=len(APIVoidBulk)-1 and ExitSearch==0:
+        matchObj=re.search ('detections":.?',APIVoidBulk)
+        if matchObj:
+            APIVoidBlacklistCount.append(matchObj.group(0))
+            print ("\"Blacklist "+APIVoidBlacklistCount[counter2])
+            BlacklistString=APIVoidBlacklistCount[counter2]
+            matchObj2=re.search('[0-9]+',BlacklistString)
+            BlacklistInt= int(matchObj2.group(0))
+            ExitSearch+=1
+        else:
+            print("No Blacklists Contain this IP")
+            BlacklistInt=0
+            ExitSearch+=1
+        x+=1
+    
+     
+    ExitSearch=0   
+    x=0
+    
+        
+    #Gather Domain Count from ViewDNS
+  
+    while x<=len(ViewDNSBulk)-1 and ExitSearch==0:
+        matchObj=re.search ('"domain_count".*?,',ViewDNSBulk)
+        if matchObj:
+            DomainCountString=matchObj.group(0)
+            matchObj2=re.search ('[0-9]+',DomainCountString)
+            DomainCountInt=int(matchObj2.group(0))
+            print (DomainCountString)
+            ExitSearch+=1
+        else:
+            print ("No Domains Hosted")
+            DomainCountInt=0
+            ExitSearch +=1
+        x+=1
+        
+            
+   
+### Decision Making Logic 
+    Verdict=0
+    while Verdict==0:
+        if BlacklistInt>0 and DomainCountInt==0:
+            print ("Blocking this IP is recommended \n")
+            IPBlocklist.append(ipArray[counter2])
+            Verdict=1
+            break
+            
+        if APIVoidCountry[counter2]=="\"country_code\":\"US\"" and BlacklistInt>=1 and DomainCountInt==0:   
+            print ("Blocking this IP is recommended \n")
+            IPBlocklist.append(ipArray[counter2])
+            Verdict=1
+            break
+            
+        if APIVoidCountry[counter2]=="\"country_code\":\"CN\"" and DomainCountInt==0:   
+            print ("Blocking this IP is recommended \n")
+            IPBlocklist.append(ipArray[counter2])
+            Verdict=1
+            break
+        
+        if APIVoidCountry[counter2]=="\"country_code\":\"US\"" and BlacklistInt==0:
+            print ("It is not recommended to block this IP \n")
+            Verdict=1
+            break
+            
+        
+        if BlacklistInt==0:
+            print ("It is not recommended to block this IP \n")
+            Verdict=1
+            break
+            
+        if BlacklistInt>2 and (DomainCountInt>=1 and DomainCountInt<=10):
+            print ("It is recommended to block this IP, but ensure that domains hosted have not been visited in the past 30 days" )
+            IPBlocklist_WithCheck.append(ipArray[counter2])
+            Verdict=1
+            break
+    
+        if APIVoidCountry[counter2]=="\"country_code\":\"US\"" and DomainCountInt>=10 and BlacklistInt>=1 :
+            print ("It is recommended to block this IP, but ensure that domains hosted have not been visited in the past 30 days" )
+            IPBlocklist_WithCheck.append(ipArray[counter2])
+            Verdict=1
+            break
+        Verdict=1
+        
+
+    
+            
+    ExitSearch=0
+    counter2+=1
+    x=0           
+
+#Creating Listing Output
+if len(IPBlocklist)>0:
+    print("\n" + "The following IPs are recommended to be blocked:")
+    for i in range (len(IPBlocklist)):
+        print (IPBlocklist[i])         
+
+if len(IPBlocklist_WithCheck)>0:
+    print("\n" + "The following IPs are recommended to be blocked after ensuring there has been no traffic to them for the past 30 days:")
+    for i in range (len(IPBlocklist_WithCheck)):
+        print (IPBlocklist_WithCheck[i])     
+            
+
