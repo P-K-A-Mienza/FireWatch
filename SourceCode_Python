@@ -138,7 +138,6 @@ APIVoid_rDNS=[]
 APIVoidCountry=[]
 APIVoidBulk=""
 APIVoid=[]
-APIVoidBulk=""
 APIVoidBlacklistCount=[]
 BlacklistCount=0
 ViewDNSBulk=""
